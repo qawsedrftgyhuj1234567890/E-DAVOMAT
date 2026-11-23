@@ -1,501 +1,337 @@
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Boyovut tuman 1-son Texnikum</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon-192.png">
-  <meta name="theme-color" content="#2563eb">
+// Cloudflare Worker: davomatni qabul qiladi, Telegramga yuboradi va
+// har kuni 18:00 (Toshkent) da kunlik hisobot + diagramma yuboradi.
+// Secrets: BOT_TOKEN, CHAT_ID, ADMIN_KEY   |   KV binding: ATT
 
-  <style>
-    :root { background: #f3f4f6; color: #1f2937; }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    body { padding: 20px; display: flex; justify-content: center; }
-    .app { background: #ffffff; padding: 24px; border-radius: 12px; max-width: 500px; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    h1 { font-size: 20px; margin-bottom: 16px; text-align: center; color: #2563eb; font-weight: bold; line-height: 1.3; }
+const EMPLOYEES = {
+  "Ma'muriyat": ["Rayimov.A", "Shodiyev.D", "Usmonov.R", "Razzoqberdiyev.Q", "Boltayev.K", "Berdinazarova.D", "Mamanazarov.R", "Mamatqulova.Yu", "Mavlonov.Yu", "Ollonazarov.U", "Keldibekov.F", "Xolmuhammedov.A", "Usmonova.N", "Xo`janov.N", "Xolboyeva.Sh", "Xolbo`tayeva.F", "Sharipov.O", "Tursunov.A", "Latipov.A"],
+  "O'qituvchilar": ["Abdujalilov.A", "Abdurahmonova.A", "Abdurahmonova.S", "Abdurahmonova.N", "Abduqahhorov.O", "Abdurazzoqov.E", "Ahmadqulova.R", "Allayorova.M", "G`aniyeva.Z", "Hamidova.M", "Igamberdiyev.A", "Jalilova.N", "Karimov.A", "Kasimov.R", "Ko`chmurodov.M", "Latipova.O", "Mirzayeva.Sh", "Muhammadqulov.J", "Normamatov.L", "Qoraboyeva.Sh", "Rahimov.J", "Sangilov.S", "Sheraliyev.Sh", "Soyupov.F", "Usmonova.Z", "Xamidov.S", "Xaydarova.D", "Yo`ldoshev.J"],
+  "ICHTU": ["Abdujalilov.A", "Berdaliyev.B", "Bobomurodov.O", "G`aybullayev.A", "Mamanazarov.A", "Murodov.A", "Nasriddinov.A", "O`razaliyev.A", "Odilov.S", "Rayimjonov.A", "Shukurov.A", "Tadjibayev.R", "Jumanova.Z", "To`ychiboyev.B", "Tojiboyev.R", "Turdiqulov.U"]
+};
 
-    .install-btn { width: 100%; padding: 12px; background: #8b5cf6; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 15px; margin-bottom: 18px; cursor: pointer; display: none; }
-
-    .form-group { margin-bottom: 16px; }
-    label { display: block; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
-    input, select { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 15px; }
-    .mode-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 4px; }
-    .mode-tile { margin: 0; padding: 16px 8px; border-radius: 14px; border: 2px solid #e5e7eb; background: #f9fafb; color: #9ca3af; text-align: center; cursor: default; user-select: none; transition: all .35s; }
-    .mode-tile .m-icon { font-size: 30px; line-height: 1; }
-    .mode-tile .m-title { font-size: 18px; margin-top: 6px; }
-    .mode-tile .m-time { font-size: 12px; font-weight: normal; margin-top: 2px; }
-    .mode-tile.active.keldi { background: linear-gradient(135deg,#22c55e,#15803d); border-color: #15803d; color: #fff; box-shadow: 0 6px 16px rgba(22,163,74,.35); transform: scale(1.03); }
-    .mode-tile.active.ketdi { background: linear-gradient(135deg,#f87171,#b91c1c); border-color: #b91c1c; color: #fff; box-shadow: 0 6px 16px rgba(220,38,38,.35); transform: scale(1.03); }
-    .mode-tile:not(.active) { opacity: .55; }
-    .photo-box { position: relative; width: 100%; height: 280px; background: #e5e7eb; border: 2px dashed #9ca3af; border-radius: 8px; margin: 15px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .photo-preview, .live-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
-    .live-video.mirror { transform: scaleX(-1); }
-    .file-input { display: none; }
-    button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; }
-    .btn-blue { background: #2563eb; color: #fff; }
-    .btn-green { background: #16a34a; color: #fff; }
-    .btn-orange { background: #ea580c; color: #fff; }
-    button:disabled { background: #9ca3af; cursor: not-allowed; }
-    .status-badge { font-size: 13px; padding: 8px; border-radius: 4px; background: #e5e7eb; text-align: center; margin-top: 5px; font-weight: bold; }
-    .status-badge.error { background: #fecdd3; color: #9f1239; }
-    .status-badge.success { background: #dcfce7; color: #166534; }
-    .status-badge.warn { background: #fef3c7; color: #92400e; }
-    .leave-box { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
-  </style>
-</head>
-<body>
-
-<div class="app">
-  <h1>Boyovut tuman 1-son Texnikum</h1>
-
-  <button type="button" id="btn-install" class="install-btn" onclick="installPWA()">📲 Ilovani telefonga o'rnatish</button>
-
-  <div class="status-badge" id="time-status">Vaqt tekshirilmoqda...</div>
-
-  <div class="form-group" style="margin-top:16px">
-    <label>Bo'limni tanlang</label>
-    <select id="emp-dept" onchange="updateEmployeeList()">
-      <option value="">Tanlang...</option>
-      <option value="Ma'muriyat">1. Ma'muriyat</option>
-      <option value="O'qituvchilar">2. O'qituvchilar</option>
-      <option value="ICHTU">3. ICHTU</option>
-    </select>
-  </div>
-
-  <div class="form-group">
-    <label>Xodim F.I.Sh.</label>
-    <select id="emp-name" onchange="checkForm()" disabled>
-      <option value="">Xodimni tanlang...</option>
-    </select>
-  </div>
-
-  <div class="form-group">
-    <label>Harakat turi</label>
-    <div class="mode-group">
-      <div class="mode-tile keldi" id="tile-keldi"><div class="m-icon">🟢</div><div class="m-title">KELDI</div><div class="m-time">07:00 - 08:30</div></div>
-      <div class="mode-tile ketdi" id="tile-ketdi"><div class="m-icon">🔴</div><div class="m-title">KETDI</div><div class="m-time">15:30 - 17:00</div></div>
-    </div>
-    <div class="status-badge" style="margin-top:8px">Harakat turi vaqtga qarab avtomatik tanlanadi</div>
-    <div class="status-badge" id="done-status" style="display:none"></div>
-  </div>
-
-  <div class="form-group">
-    <label>Face Control (Rasmga tushish)</label>
-    <div class="photo-box">
-      <span id="photo-placeholder">Rasm yuklanmagan</span>
-      <video id="live-video" class="live-video" autoplay playsinline muted></video>
-      <img id="preview" class="photo-preview" alt="Preview">
-    </div>
-    <input type="file" accept="image/*" capture="user" id="camera-file" class="file-input" onchange="handlePhoto(this)">
-    <button type="button" class="btn-blue" id="btn-camera-trigger" onclick="cameraButton()" disabled>Kamerani ochish</button>
-    <div class="status-badge" id="face-status">Kutilmoqda...</div>
-  </div>
-
-  <div class="form-group">
-    <label>GPS Geolokatsiya</label>
-    <button type="button" class="btn-blue" onclick="verifyGPS()">GPS manzilni aniqlash</button>
-    <div class="status-badge" id="geo-status">Kutilmoqda...</div>
-  </div>
-
-  <button type="button" class="btn-green" id="btn-submit" onclick="sendDataToTelegram()" disabled>Tasdiqlash va Saqlash</button>
-
-  <div class="leave-box">
-    <button type="button" class="btn-orange" onclick="callForLeave()">📞 Ishdan javob olish</button>
-  </div>
-</div>
-
-<script>
-  const employeesByDept = {
-    "Ma'muriyat": ["Rayimov.A", "Shodiyev.D", "Usmonov.R", "Razzoqberdiyev.Q", "Boltayev.K", "Berdinazarova.D", "Mamanazarov.R", "Mamatqulova.Yu", "Mavlonov.Yu", "Ollonazarov.U", "Keldibekov.F", "Xolmuhammedov.A", "Usmonova.N", "Xo`janov.N", "Xolboyeva.Sh", "Xolbo`tayeva.F", "Sharipov.O", "Tursunov.A", "Latipov.A"],
-    "O'qituvchilar": ["Abdujalilov.A", "Abdurahmonova.A", "Abdurahmonova.S", "Abdurahmonova.N", "Abduqahhorov.O", "Abdurazzoqov.E", "Ahmadqulova.R", "Allayorova.M", "G`aniyeva.Z", "Hamidova.M", "Igamberdiyev.A", "Jalilova.N", "Karimov.A", "Kasimov.R", "Ko`chmurodov.M", "Latipova.O", "Mirzayeva.Sh", "Muhammadqulov.J", "Normamatov.L", "Qoraboyeva.Sh", "Rahimov.J", "Sangilov.S", "Sheraliyev.Sh", "Soyupov.F", "Usmonova.Z", "Xamidov.S", "Xaydarova.D", "Yo`ldoshev.J"],
-    "ICHTU": ["Abdujalilov.A", "Berdaliyev.B", "Bobomurodov.O", "G`aybullayev.A", "Mamanazarov.A", "Murodov.A", "Nasriddinov.A", "O`razaliyev.A", "Odilov.S", "Rayimjonov.A", "Shukurov.A", "Tadjibayev.R", "Jumanova.Z", "To`ychiboyev.B", "Turdiqulov.U"]
-  };
-
-  // ---- SOZLAMALAR ----
-  const LEAVE_PHONE = "+998950566816";
-  // Cloudflare Worker manzili (worker.js ni deploy qilgach shu yerga yozing)
-  const WORKER_URL = "https://davomat.otdelkadrov-1khm.workers.dev";
-  const TECH_LAT = 40.282981;
-  const TECH_LON = 69.033522;
-  const MAX_DISTANCE_METERS = 200;
-  // Vaqt oynalari (daqiqalarda, Toshkent vaqti)
-  const WINDOWS = {
-    keldi: { start: 7 * 60,       end: 8 * 60 + 30,  label: "07:00 - 08:30" },
-    ketdi: { start: 15 * 60 + 30, end: 17 * 60,      label: "15:30 - 17:00" }
-  };
-
-  let faceVerified = false;
-  let geoVerified = false;
-  let coordsText = "";
-  let rawFileBlob = null;
-  let deferredPrompt = null;
-  let cameraStream = null;
-  let cameraActive = false;
-
-  // ---- TOSHKENT VAQTI (telefon vaqt zonasidan qat'i nazar UTC+5) ----
-  function tashkentNow() {
-    const d = new Date();
-    return new Date(d.getTime() + d.getTimezoneOffset() * 60000 + 5 * 3600000);
+const WINDOWS = {
+  keldi: { start: 7 * 60,       end: 8 * 60 + 30 },
+  ketdi: { start: 15 * 60 + 30, end: 17 * 60 }
+};
+// BIR MARTALIK O'ZGARISHLAR: faqat shu sanada vaqt oynasi o'zgaradi, ertasi kuni avtomatik odatdagiga qaytadi.
+// Namuna (shu qatorni oching va sanani yozing):
+//   "2026-11-24": { keldi: { end: "10:00" } },
+const OVERRIDES = {
+  // "2026-11-24": { keldi: { end: "10:00" } },
+};
+const hmToMin = s => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+async function windowsFor(env, day) {
+  const w = { keldi: { ...WINDOWS.keldi }, ketdi: { ...WINDOWS.ketdi } };
+  // 1) koddagi OVERRIDES, 2) havola orqali qo'yilgan (KV) bir kunlik o'zgarish
+  const o = { ...(OVERRIDES[day] || {}) };
+  try {
+    const kv = JSON.parse((await env.ATT.get(`override:${day}`)) || "null");
+    if (kv) for (const t of ["keldi", "ketdi"]) if (kv[t]) o[t] = { ...(o[t] || {}), ...kv[t] };
+  } catch (e) {}
+  for (const t of ["keldi", "ketdi"]) {
+    if (o[t] && o[t].start) w[t].start = hmToMin(o[t].start);
+    if (o[t] && o[t].end) w[t].end = hmToMin(o[t].end);
   }
-  function todayKey() {
-    const t = tashkentNow();
-    return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
-  }
-  // Harakat turi avtomatik: 12:00 gacha - Keldi, undan keyin - Ketdi
-  function currentType() {
-    const t = tashkentNow();
-    return (t.getHours() * 60 + t.getMinutes()) < 12 * 60 ? "keldi" : "ketdi";
-  }
-  function typeLabel(type) { return type === "keldi" ? "🟢 Keldi" : "🔴 Ketdi"; }
-  function renderTiles() {
-    const type = currentType();
-    document.getElementById('tile-keldi').classList.toggle('active', type === "keldi");
-    document.getElementById('tile-ketdi').classList.toggle('active', type === "ketdi");
-  }
-  // Vaqt holati: "open" | "early" | "late"
-  function windowState(type) {
-    const t = tashkentNow();
-    const m = t.getHours() * 60 + t.getMinutes();
-    const w = WINDOWS[type];
-    if (m < w.start) return "early";
-    if (m > w.end) return "late";
-    return "open";
-  }
+  return w;
+}
 
-  // ---- KUNIGA BIR MARTA ----
-  function doneKey(type) {
-    const name = document.getElementById('emp-name').value;
-    const dept = document.getElementById('emp-dept').value;
-    return `att_${todayKey()}_${dept}_${name}_${type}`;
-  }
-  function isAlreadyDone(type) {
-    const name = document.getElementById('emp-name').value;
-    if (!name) return false;
-    try { return localStorage.getItem(doneKey(type)) === "1"; } catch (e) { return false; }
-  }
-  function markDone(type) {
-    try { localStorage.setItem(doneKey(type), "1"); } catch (e) {}
-  }
+const SKIP_SUNDAY = true; // yakshanba kuni hisobot yuborilmaydi
 
-  // ---- VAQT / HOLAT PANELI ----
-  function refreshTimeStatus() {
-    renderTiles();
-    const type = currentType();
-    const w = WINDOWS[type];
-    const state = windowState(type);
-    const el = document.getElementById('time-status');
-    const title = type === "keldi" ? "Kelish" : "Ketish";
+// Secrets Store (yoki oddiy secret) qiymatlarini o'qish
+async function resolveEnv(env) {
+  const out = { ATT: env.ATT };
+  for (const k of ["BOT_TOKEN", "CHAT_ID", "ADMIN_KEY"]) {
+    const v = env[k];
+    out[k] = (v && typeof v.get === "function") ? await v.get() : v;
+  }
+  return out;
+}
 
-    if (state === "open") {
-      el.textContent = `🟢 ${title} vaqti ochiq (${w.label})`;
-      el.className = "status-badge success";
-    } else if (state === "late") {
-      el.textContent = `⛔ ${title} vaqti tugadi! (${w.label})`;
-      el.className = "status-badge error";
-    } else {
-      el.textContent = `⏳ ${title} vaqti hali boshlanmadi (${w.label})`;
-      el.className = "status-badge warn";
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...CORS } });
+
+// Toshkent vaqti (UTC+5)
+function tashkent() {
+  return new Date(Date.now() + 5 * 3600000);
+}
+const pad = n => String(n).padStart(2, "0");
+function dateKey(t = tashkent()) {
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+}
+function hhmm(t = tashkent()) { return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`; }
+function minutes(t = tashkent()) { return t.getUTCHours() * 60 + t.getUTCMinutes(); }
+
+export default {
+  async fetch(req, rawEnv) {
+    const env = await resolveEnv(rawEnv);
+    const url = new URL(req.url);
+    if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+    if (url.pathname === "/attendance" && req.method === "POST") {
+      return handleAttendance(req, env);
     }
-
-    const doneEl = document.getElementById('done-status');
-    if (isAlreadyDone(type)) {
-      doneEl.textContent = `✅ Bugun "${title}" allaqachon yuborilgan. Kuniga faqat 1 marta.`;
-      doneEl.className = "status-badge warn";
-      doneEl.style.display = "block";
-    } else {
-      doneEl.style.display = "none";
+    // Sinash uchun: /report?key=ADMIN_KEY
+    if (url.pathname === "/report" && url.searchParams.get("key") === env.ADMIN_KEY) {
+      const steps = await sendReport(env, true);
+      return json({ ok: steps.every(x => x.ok), steps });
     }
-    updateSubmitButton();
-  }
-  setInterval(refreshTimeStatus, 15000);
-
-  // ---- ISHDAN JAVOB OLISH ----
-  function callForLeave() {
-    window.location.href = "tel:" + LEAVE_PHONE;
-  }
-
-  // ---- ILOVA O'RNATISH ----
-  const installBtn = document.getElementById('btn-install');
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  let isInstalledInStorage = false;
-  try { isInstalledInStorage = localStorage.getItem('appInstalled') === 'true'; } catch (e) {}
-
-  if (!isStandalone && !isInstalledInStorage) {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      installBtn.style.display = 'block';
-    });
-  }
-
-  function installPWA() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-          try { localStorage.setItem('appInstalled', 'true'); } catch (e) {}
-          installBtn.style.display = 'none';
-        }
-        deferredPrompt = null;
+    // Tekshiruv: /diag?key=ADMIN_KEY  (bot, guruh va bot huquqlarini ko'rsatadi)
+    if (url.pathname === "/diag" && url.searchParams.get("key") === env.ADMIN_KEY) {
+      const call = async (m, p) => (await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${m}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p || {})
+      })).json();
+      const me = await call("getMe");
+      const chat = await call("getChat", { chat_id: env.CHAT_ID });
+      let member = null;
+      if (me.ok) member = await call("getChatMember", { chat_id: env.CHAT_ID, user_id: me.result.id });
+      const id = String(env.CHAT_ID || "");
+      return json({
+        bot: me.ok ? "@" + me.result.username : me.description,
+        chatIdPreview: id.slice(0, 5) + "... (" + id.length + " belgi)",
+        guruh: chat.ok ? chat.result.title + " (" + chat.result.type + ")" : chat.description,
+        botHolati: member ? (member.ok ? member.result.status : member.description) : "-"
       });
-    } else {
-      const isAndroid = /Android/i.test(navigator.userAgent);
-      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isAndroid) {
-        alert("Ilovani o'rnatish uchun:\n1. Brauzerning yuqori burchagidagi 3 ta nuqtani (⋮) bosing.\n2. 'Bosh ekranga qo'shish' ni bosing.");
-      } else if (isIOS) {
-        alert("Ilovani o'rnatish uchun:\n1. Pastdagi 'Ulashish' tugmasini bosing.\n2. 'Bosh ekranga qo'shish' (Add to Home Screen) ni bosing.");
+    }
+    // BIR KUNLIK UZAYTIRISH (havola orqali):
+    //   /extend?key=PAROL&type=keldi&end=10:00     -> bugun Keldi 10:00 gacha
+    //   /extend?key=PAROL&type=keldi&end=reset     -> bekor qilish (odatdagi vaqt)
+    if (url.pathname === "/extend" && url.searchParams.get("key") === env.ADMIN_KEY) {
+      const text = (s, st = 200) => new Response(s, { status: st, headers: { "Content-Type": "text/plain; charset=utf-8", ...CORS } });
+      const type = url.searchParams.get("type") || "keldi";
+      const end = url.searchParams.get("end") || "";
+      const day = dateKey();
+      const label = type === "keldi" ? "Keldi" : "Ketdi";
+      if (!WINDOWS[type]) return text("Xato: type 'keldi' yoki 'ketdi' bo'lishi kerak", 400);
+      const kvKey = `override:${day}`;
+      const cur = JSON.parse((await env.ATT.get(kvKey)) || "{}");
+      if (end === "reset") {
+        delete cur[type];
+        if (Object.keys(cur).length) await env.ATT.put(kvKey, JSON.stringify(cur), { expirationTtl: 172800 });
+        else await env.ATT.delete(kvKey);
+        const w = (await windowsFor(env, day))[type];
+        return text(`✅ ${day}: ${label} vaqti odatdagiga qaytarildi (${pad(Math.floor(w.start / 60))}:${pad(w.start % 60)} - ${pad(Math.floor(w.end / 60))}:${pad(w.end % 60)})`);
       }
+      if (!/^\d{1,2}:\d{2}$/.test(end)) return text("Xato: end=10:00 ko'rinishida yozing (yoki end=reset)", 400);
+      const mins = hmToMin(end);
+      const base = WINDOWS[type];
+      if (mins > 23 * 60 + 59 || mins % 60 > 59) return text("Xato: noto'g'ri soat", 400);
+      if (type === "keldi" && mins > 11 * 60 + 59) return text("Xato: Keldi vaqtini 11:59 dan keyin qilib bo'lmaydi (ilova 12:00 da Ketdi rejimiga o'tadi)", 400);
+      if (mins < base.end && !(type === "keldi" && mins > base.start)) return text("Xato: yangi vaqt odatdagi tugash vaqtidan kech bo'lishi kerak", 400);
+      cur[type] = { end: `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}` };
+      await env.ATT.put(kvKey, JSON.stringify(cur), { expirationTtl: 172800 });
+      return text(`✅ ${day}: bugun ${label} vaqti ${cur[type].end} gacha uzaytirildi. Ertaga o'zi odatdagiga qaytadi.`);
     }
+    // Ilova bugungi vaqt oynalarini shu yerdan oladi
+    if (url.pathname === "/config" && req.method === "GET") {
+      return json({ ok: true, date: dateKey(), windows: await windowsFor(env, dateKey()) });
+    }
+    return json({ ok: false, error: "Topilmadi" }, 404);
+  },
+
+  async scheduled(event, rawEnv, ctx) {
+    const env = await resolveEnv(rawEnv);
+    ctx.waitUntil(sendReport(env, false));
   }
-  window.addEventListener('appinstalled', () => {
-    try { localStorage.setItem('appInstalled', 'true'); } catch (e) {}
-    installBtn.style.display = 'none';
+};
+
+async function handleAttendance(req, env) {
+  let form;
+  try { form = await req.formData(); } catch { return json({ ok: false, error: "Noto'g'ri so'rov" }, 400); }
+
+  const name = form.get("name"), dept = form.get("dept"), type = form.get("type");
+  const coords = form.get("coords") || "";
+  const photo = form.get("photo");
+
+  if (!EMPLOYEES[dept] || !EMPLOYEES[dept].includes(name) || !WINDOWS[type]) {
+    return json({ ok: false, error: "Xodim yoki harakat turi noto'g'ri" }, 400);
+  }
+
+  // Vaqt serverda tekshiriladi (telefon soatini o'zgartirib bo'lmaydi)
+  const now = tashkent();
+  const m = minutes(now), w = (await windowsFor(env, dateKey(now)))[type];
+  if (m > w.end) return json({ ok: false, error: "Vaqt tugadi!" });
+  if (m < w.start) return json({ ok: false, error: "Hali vaqt boshlanmadi" });
+
+  const day = dateKey(now);
+  const key = `rec:${day}:${dept}:${name}:${type}`;
+  if (await env.ATT.get(key)) {
+    return json({ ok: false, error: "Bugun allaqachon yuborilgan" });
+  }
+
+  const label = type === "keldi" ? "🟢 Keldi" : "🔴 Ketdi";
+  const caption =
+    `📊 <b>YANGI DAVOMAT HISOBOTI</b>\n\n` +
+    `👤 <b>Xodim:</b> ${name}\n` +
+    `📂 <b>Bo'lim:</b> ${dept}\n` +
+    `🔄 <b>Harakat:</b> ${label}\n` +
+    `📍 <b>Lokatsiya:</b> <a href="https://maps.google.com/?q=${coords}">Google Maps</a>\n` +
+    `🕒 <b>Vaqt:</b> ${day} ${hhmm(now)}`;
+
+  const fd = new FormData();
+  fd.append("chat_id", env.CHAT_ID);
+  fd.append("parse_mode", "HTML");
+  let method = "sendMessage";
+  if (photo && typeof photo !== "string") {
+    method = "sendPhoto";
+    fd.append("caption", caption);
+    fd.append("photo", photo, "face.jpg");
+  } else {
+    fd.append("text", caption);
+  }
+
+  const tg = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`, { method: "POST", body: fd });
+  const res = await tg.json();
+  if (!res.ok) return json({ ok: false, error: res.description || "Telegram xatosi" });
+
+  await env.ATT.put(key, JSON.stringify({ time: hhmm(now) }), { expirationTtl: 60 * 60 * 24 * 90 });
+  return json({ ok: true });
+}
+
+// ---------- KUNLIK HISOBOT ----------
+async function tgSend(env, method, payload) {
+  const r = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: env.CHAT_ID, ...payload })
   });
+  return r.json();
+}
 
-  // ---- MASOFA ----
-  function getDistanceMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const phi1 = lat1 * Math.PI / 180;
-    const phi2 = lat2 * Math.PI / 180;
-    const deltaPhi = (lat2 - lat1) * Math.PI / 180;
-    const deltaLambda = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda/2) * Math.sin(deltaLambda/2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+async function tgUpload(env, photoBlob, caption) {
+  const fd = new FormData();
+  fd.append("chat_id", env.CHAT_ID);
+  fd.append("parse_mode", "HTML");
+  fd.append("caption", caption);
+  fd.append("photo", photoBlob, "chart.png");
+  const r = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendPhoto`, { method: "POST", body: fd });
+  return r.json();
+}
+
+async function buildChartPng(cfg) {
+  const r = await fetch("https://quickchart.io/chart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: "2", backgroundColor: "white", width: 800, height: 450, format: "png", chart: cfg })
+  });
+  if (!r.ok) throw new Error("QuickChart " + r.status);
+  return r.blob();
+}
+
+// Zaxira: rasm chiqmasa, matnli diagramma
+function textChart(depts, came, left, absent) {
+  const bar = (n, max) => "█".repeat(Math.round((n / Math.max(max, 1)) * 18)) || "▏";
+  let t = "";
+  depts.forEach((d, i) => {
+    const max = Math.max(came[i], left[i], absent[i], 1);
+    t += `${d}\n` +
+         `🟢 ${bar(came[i], max)} ${came[i]}\n` +
+         `🔴 ${bar(left[i], max)} ${left[i]}\n` +
+         `⚪ ${bar(absent[i], max)} ${absent[i]}\n\n`;
+  });
+  return t;
+}
+
+async function sendLong(env, text) {
+  const parts = [];
+  let cur = "";
+  for (const line of text.split("\n")) {
+    if ((cur + line + "\n").length > 3800) { parts.push(cur); cur = ""; }
+    cur += line + "\n";
   }
+  if (cur.trim()) parts.push(cur);
+  const results = [];
+  for (const p of parts) results.push(await tgSend(env, "sendMessage", { text: p, parse_mode: "HTML" }));
+  return results;
+}
 
-  function updateEmployeeList() {
-    const dept = document.getElementById('emp-dept').value;
-    const nameSelect = document.getElementById('emp-name');
-    nameSelect.innerHTML = '<option value="">Xodimni tanlang...</option>';
-    if (dept && employeesByDept[dept]) {
-      nameSelect.disabled = false;
-      employeesByDept[dept].forEach(n => {
-        const op = document.createElement('option');
-        op.value = n;
-        op.textContent = n;
-        nameSelect.appendChild(op);
-      });
-    } else {
-      nameSelect.disabled = true;
+async function sendReport(env, force) {
+  const steps = [];
+  const now = tashkent();
+  if (SKIP_SUNDAY && now.getUTCDay() === 0 && !force) return [{ step: "yakshanba", ok: true }];
+  const day = dateKey(now);
+
+  // Bugungi yozuvlarni o'qish
+  const records = {}; // dept -> { keldi: {name: time}, ketdi: {name: time} }
+  for (const d of Object.keys(EMPLOYEES)) records[d] = { keldi: {}, ketdi: {} };
+  let cursor;
+  do {
+    const list = await env.ATT.list({ prefix: `rec:${day}:`, cursor });
+    for (const k of list.keys) {
+      const [, , dept, name, type] = k.name.split(":");
+      const v = JSON.parse((await env.ATT.get(k.name)) || "{}");
+      if (records[dept]) records[dept][type][name] = v.time || "";
     }
-    checkForm();
-  }
+    cursor = list.list_complete ? null : list.cursor;
+  } while (cursor);
 
-  function checkForm() {
-    const name = document.getElementById('emp-name').value;
-    const dept = document.getElementById('emp-dept').value;
-    document.getElementById('btn-camera-trigger').disabled = !(name && dept);
-    refreshTimeStatus();
-  }
-
-  // ---- KAMERA: avval old (front), bo'lmasa orqa, bo'lmasa fayl ----
-  async function startStream() {
-    const attempts = [
-      { video: { facingMode: { exact: "user" } }, audio: false },
-      { video: { facingMode: "environment" }, audio: false },
-      { video: true, audio: false }
-    ];
-    for (const c of attempts) {
-      try { return await navigator.mediaDevices.getUserMedia(c); } catch (e) {}
+  // Diagramma (QuickChart)
+  const depts = Object.keys(EMPLOYEES);
+  const came = depts.map(d => Object.keys(records[d].keldi).length);
+  const left = depts.map(d => Object.keys(records[d].ketdi).length);
+  const absent = depts.map((d, i) => EMPLOYEES[d].length - came[i]);
+  const cfg = {
+    type: "bar",
+    data: {
+      labels: depts,
+      datasets: [
+        { label: "Kelganlar", backgroundColor: "#16a34a", data: came },
+        { label: "Ketganlar", backgroundColor: "#dc2626", data: left },
+        { label: "Kelmaganlar", backgroundColor: "#9ca3af", data: absent }
+      ]
+    },
+    options: {
+      title: { display: true, text: `Davomat - ${day}`, fontSize: 18 },
+      scales: { yAxes: [{ ticks: { beginAtZero: true, precision: 0 } }] },
+      plugins: { datalabels: { anchor: "end", align: "top", color: "#111", font: { weight: "bold" } } }
     }
-    return null;
+  };
+  const totalAll = depts.reduce((s, d) => s + EMPLOYEES[d].length, 0);
+  const totalCame = came.reduce((a, b) => a + b, 0);
+  const totalLeft = left.reduce((a, b) => a + b, 0);
+  const caption = `📈 <b>KUNLIK HISOBOT — ${day}</b>\n\n✅ Kelganlar: ${totalCame}/${totalAll}\n🚪 Ketganlar: ${totalLeft}\n❌ Kelmaganlar: ${totalAll - totalCame}`;
+
+  // Diagramma: avval rasm (Worker o'zi yuklaydi), bo'lmasa soddalashtirilgan rasm, oxirida matnli diagramma
+  let chartSent = false, chartErr = "";
+  const simple = JSON.parse(JSON.stringify(cfg));
+  delete simple.options.plugins;
+  for (const c of [cfg, simple]) {
+    if (chartSent) break;
+    try {
+      const png = await buildChartPng(c);
+      const res = await tgUpload(env, png, caption);
+      if (res.ok) chartSent = true; else chartErr = res.description || "Telegram rad etdi";
+    } catch (e) { chartErr = String(e.message || e); }
+  }
+  steps.push({ step: "diagramma-rasm", ok: chartSent, error: chartSent ? undefined : chartErr });
+  if (!chartSent) {
+    const r = await tgSend(env, "sendMessage", {
+      parse_mode: "HTML",
+      text: caption + "\n\n<pre>" + textChart(depts, came, left, absent) + "🟢 kelgan  🔴 ketgan  ⚪ kelmagan</pre>"
+    });
+    steps.push({ step: "diagramma-matn", ok: !!r.ok, error: r.ok ? undefined : r.description });
   }
 
-  function stopStream() {
-    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-    cameraActive = false;
-    document.getElementById('live-video').style.display = 'none';
+  // Ro'yxat
+  let text = `📋 <b>KUNLIK RO'YXAT — ${day}</b>\n`;
+  for (const d of depts) {
+    const k = records[d].keldi, t = records[d].ketdi;
+    const kNames = Object.keys(k).sort((a, b) => k[a].localeCompare(k[b]));
+    const tNames = Object.keys(t).sort((a, b) => t[a].localeCompare(t[b]));
+    const noShow = EMPLOYEES[d].filter(n => !(n in k));
+
+    text += `\n📂 <b>${d}</b> (${EMPLOYEES[d].length} ta)\n`;
+    text += `🟢 <b>Kelganlar (${kNames.length}):</b>\n` +
+            (kNames.length ? kNames.map((n, i) => `${i + 1}. ${n} — ${k[n]}`).join("\n") : "—") + "\n";
+    text += `🔴 <b>Ketganlar (${tNames.length}):</b>\n` +
+            (tNames.length ? tNames.map((n, i) => `${i + 1}. ${n} — ${t[n]}`).join("\n") : "—") + "\n";
+    text += `❌ <b>Kelmaganlar (${noShow.length}):</b>\n` +
+            (noShow.length ? noShow.join(", ") : "—") + "\n";
   }
-
-  async function cameraButton() {
-    const btn = document.getElementById('btn-camera-trigger');
-    const video = document.getElementById('live-video');
-
-    // Kamera ochiq bo'lsa — rasmga olish
-    if (cameraActive) {
-      captureFromVideo(video);
-      return;
-    }
-
-    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
-      document.getElementById('camera-file').click();
-      return;
-    }
-
-    btn.disabled = true;
-    const stream = await startStream();
-    btn.disabled = false;
-
-    if (!stream) {
-      // Ruxsat berilmadi yoki kamera ochilmadi — oddiy kamera oynasi
-      document.getElementById('camera-file').click();
-      return;
-    }
-
-    cameraStream = stream;
-    cameraActive = true;
-    const settings = stream.getVideoTracks()[0].getSettings ? stream.getVideoTracks()[0].getSettings() : {};
-    video.classList.toggle('mirror', settings.facingMode !== "environment");
-    video.srcObject = stream;
-    video.style.display = 'block';
-    document.getElementById('preview').style.display = 'none';
-    document.getElementById('photo-placeholder').style.display = 'none';
-    btn.textContent = "📸 Rasmga olish";
-    faceVerified = false;
-    rawFileBlob = null;
-    const st = document.getElementById('face-status');
-    st.textContent = "Yuzingizni kameraga qarating";
-    st.className = "status-badge";
-    updateSubmitButton();
-  }
-
-  function captureFromVideo(video) {
-    if (!video.videoWidth) return;
-    drawToBlob(video, video.videoWidth, video.videoHeight);
-    stopStream();
-    document.getElementById('btn-camera-trigger').textContent = "🔄 Qayta olish";
-  }
-
-  function drawToBlob(source, srcW, srcH) {
-    const MAX_SIZE = 800;
-    let width = srcW, height = srcH;
-    if (width > height) {
-      if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
-    } else {
-      if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext('2d').drawImage(source, 0, 0, width, height);
-    canvas.toBlob((blob) => {
-      rawFileBlob = blob;
-      const prev = document.getElementById('preview');
-      prev.src = canvas.toDataURL('image/jpeg', 0.6);
-      prev.style.display = 'block';
-      document.getElementById('photo-placeholder').style.display = 'none';
-      faceVerified = true;
-      const st = document.getElementById('face-status');
-      st.textContent = "🟢 Rasm yuklandi!";
-      st.className = "status-badge success";
-      updateSubmitButton();
-    }, 'image/jpeg', 0.6);
-  }
-
-  // Zaxira: fayl orqali (capture="user")
-  function handlePhoto(input) {
-    if (input.files && input.files[0]) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() { drawToBlob(img, img.width, img.height); };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(input.files[0]);
-      input.value = "";
-    }
-  }
-
-  // ---- GPS ----
-  function verifyGPS() {
-    const statusEl = document.getElementById('geo-status');
-    statusEl.textContent = "Sputniklar qidirilmoqda (GPS)...";
-    statusEl.className = "status-badge";
-
-    if (!navigator.geolocation) {
-      statusEl.textContent = "❌ Telefoningiz GPS-ni qo'llab-quvvatlamaydi!";
-      statusEl.className = "status-badge error";
-      geoVerified = false;
-      updateSubmitButton();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const dist = getDistanceMeters(lat, lon, TECH_LAT, TECH_LON);
-        coordsText = `${lat},${lon}`;
-        if (dist <= MAX_DISTANCE_METERS) {
-          geoVerified = true;
-          statusEl.textContent = `🟢 Hududdasiz (${Math.round(dist)}m)`;
-          statusEl.className = "status-badge success";
-        } else {
-          geoVerified = false;
-          statusEl.textContent = `❌ Hududdan tashqaridasiz! Masofa: ${Math.round(dist)}m (200m gacha ruxsat)`;
-          statusEl.className = "status-badge error";
-        }
-        updateSubmitButton();
-      },
-      err => {
-        geoVerified = false;
-        let msg = "❌ GPS aniqlanmadi!";
-        if (err.code === 1) msg = "❌ GPS ruxsati berilmagan! Sozlamalardan joylashuvga ruxsat bering.";
-        else if (err.code === 2) msg = "❌ GPS signali topilmadi. Ochiq havoga chiqing.";
-        else if (err.code === 3) msg = "❌ GPS vaqt tugadi. Qaytadan urinib ko'ring.";
-        statusEl.textContent = msg;
-        statusEl.className = "status-badge error";
-        updateSubmitButton();
-      },
-      { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
-    );
-  }
-
-  function updateSubmitButton() {
-    const name = document.getElementById('emp-name').value;
-    const dept = document.getElementById('emp-dept').value;
-    const type = currentType();
-    const ok = name && dept && faceVerified && geoVerified &&
-               windowState(type) === "open" && !isAlreadyDone(type);
-    document.getElementById('btn-submit').disabled = !ok;
-  }
-
-  // ---- SERVERGA (WORKER) YUBORISH ----
-  function sendDataToTelegram() {
-    const type = currentType();
-    const state = windowState(type);
-    if (state === "late") { alert("Vaqt tugadi!"); refreshTimeStatus(); return; }
-    if (state === "early") { alert("Hali vaqt boshlanmadi: " + WINDOWS[type].label); refreshTimeStatus(); return; }
-    if (isAlreadyDone(type)) { alert("Bugun allaqachon yuborilgan."); refreshTimeStatus(); return; }
-
-    const submitBtn = document.getElementById('btn-submit');
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Yuborilmoqda...";
-
-    const formData = new FormData();
-    formData.append("name", document.getElementById('emp-name').value);
-    formData.append("dept", document.getElementById('emp-dept').value);
-    formData.append("type", type);
-    formData.append("coords", coordsText);
-    if (rawFileBlob) formData.append("photo", rawFileBlob, "face.jpg");
-
-    fetch(WORKER_URL + "/attendance", { method: "POST", body: formData })
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) {
-          markDone(type);
-          alert("Davomat muvaffaqiyatli qayd etildi!");
-          location.reload();
-        } else {
-          alert("Xatolik: " + (data.error || "Qayta urinib ko'ring"));
-          submitBtn.textContent = "Tasdiqlash va Saqlash";
-          if (data.error && /yuborilgan/.test(data.error)) markDone(type);
-          refreshTimeStatus();
-        }
-      })
-      .catch(() => {
-        alert("Tarmoq xatosi. Internetni tekshiring.");
-        submitBtn.textContent = "Tasdiqlash va Saqlash";
-        updateSubmitButton();
-      });
-  }
-
-  // Oflayn qobiq (PWA) - faqat HTTPS orqali ishlaydi, APK ichida jim o'tkazib yuboriladi
-  try { if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js'); } catch (e) {}
-
-  refreshTimeStatus();
-</script>
-</body>
-</html>
+  const lr = await sendLong(env, text);
+  steps.push({ step: "royxat", ok: lr.every(x => x.ok), error: (lr.find(x => !x.ok) || {}).description });
+  return steps;
+}
